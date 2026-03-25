@@ -22,7 +22,7 @@ Works with **Zapier Chatbots**, **Botpress**, **Tidio**, **Intercom**, **Drift**
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/MenuBarBot.git
+git clone https://github.com/NYCesar/MenuBarBot.git
 cd MenuBarBot
 cp config.sh.example config.sh   # or just edit config.sh directly
 ```
