@@ -3,7 +3,8 @@
 # =============================================================================
 # Uninstall MenuBarBot
 # =============================================================================
-# Cleanly removes the app, LaunchAgent, and stops any running instance.
+# Removes the app, the LaunchAgent, the installer receipt, and the per-user
+# WebKit data the app leaves behind. Stops any running instance first.
 #
 # Usage:
 #   Run locally:          sudo ./uninstall.sh
@@ -19,6 +20,7 @@ CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 
 # Try to load config; fall back to Jamf parameters or defaults
 if [[ -f "${CONFIG_FILE}" ]]; then
+    # shellcheck source=/dev/null
     source "${CONFIG_FILE}"
 else
     APP_NAME="${4:-MenuBarBot}"
@@ -35,7 +37,7 @@ echo "Uninstalling ${APP_NAME}..."
 CURRENT_USER=$(stat -f "%Su" /dev/console)
 
 # Unload the LaunchAgent for the current user
-if [[ "${CURRENT_USER}" != "loginwindow" && "${CURRENT_USER}" != "_mbsetupuser" ]]; then
+if [[ "${CURRENT_USER}" != "loginwindow" && "${CURRENT_USER}" != "_mbsetupuser" && "${CURRENT_USER}" != "root" ]]; then
     CURRENT_UID=$(id -u "${CURRENT_USER}")
     launchctl bootout "gui/${CURRENT_UID}/${LAUNCH_AGENT_LABEL}" 2>/dev/null || true
     echo "LaunchAgent unloaded for user ${CURRENT_USER}"
@@ -56,6 +58,31 @@ if [[ -d "${APP_PATH}" ]]; then
     rm -rf "${APP_PATH}"
     echo "Removed ${APP_PATH}"
 fi
+
+# Forget the installer receipt. Without this the package still shows up in
+# `pkgutil --pkgs` after removal, and any receipt-based Jamf Smart Group
+# keeps reporting the machine as having the app installed.
+if pkgutil --pkg-info "${APP_IDENTIFIER}" &>/dev/null; then
+    pkgutil --forget "${APP_IDENTIFIER}" >/dev/null 2>&1 || true
+    echo "Forgot package receipt ${APP_IDENTIFIER}"
+fi
+
+# Remove per-user data. WKWebView writes here even in non-persistent mode
+# (caches and saved state), and these survive deleting the .app.
+for USER_HOME in /Users/*; do
+    [[ -d "${USER_HOME}" ]] || continue
+    case "$(basename "${USER_HOME}")" in
+        Shared|Guest) continue ;;
+    esac
+
+    rm -rf "${USER_HOME}/Library/WebKit/${APP_IDENTIFIER}"
+    rm -rf "${USER_HOME}/Library/Caches/${APP_IDENTIFIER}"
+    rm -rf "${USER_HOME}/Library/HTTPStorages/${APP_IDENTIFIER}"
+    rm -rf "${USER_HOME}/Library/HTTPStorages/${APP_IDENTIFIER}.binarycookies"
+    rm -rf "${USER_HOME}/Library/Saved Application State/${APP_IDENTIFIER}.savedState"
+    rm -f  "${USER_HOME}/Library/Preferences/${APP_IDENTIFIER}.plist"
+done
+echo "Removed per-user application data"
 
 echo "${APP_NAME} uninstalled successfully."
 exit 0

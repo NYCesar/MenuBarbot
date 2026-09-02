@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# =============================================================================
+# MenuBarBot Configuration
+# =============================================================================
+# Copy this file to config.sh and edit the values below.
+#
+#     cp config.sh.example config.sh
+#
+# config.sh is gitignored, so your internal bot URL never lands in the repo.
+# The build script, uninstall script, and Jamf extension attribute all read
+# from it: change once, apply everywhere.
+# =============================================================================
+
+# --- Required ----------------------------------------------------------------
+
+# The URL your chatbot is hosted at.
+# Works with Zapier Chatbots, Botpress, Tidio, Intercom, Drift, or any
+# web-hosted chatbot/page.
+#
+# Use https. If you set an http:// URL, build.sh adds a narrowly scoped App
+# Transport Security exception for that one host and warns you about it.
+BOT_URL="https://your-chatbot-url.example.com/"
+
+# What users see in the menu bar tooltip, popover title and About dialog
+APP_DISPLAY_NAME="My IT Bot"
+
+# Internal app name (no spaces — used for the binary, .app bundle, process name)
+APP_NAME="MenuBarBot"
+
+# macOS bundle identifier (reverse-DNS style, must be unique to your org)
+APP_IDENTIFIER="com.example.menubarbot"
+
+# Version string shown in About dialog and used in the .pkg filename
+APP_VERSION="1.0"
+
+# --- Optional ----------------------------------------------------------------
+
+# Copyright line shown in the About dialog
+APP_COPYRIGHT="© 2025 Your Organization"
+
+# Popover dimensions (pixels)
+POPOVER_WIDTH=420
+POPOVER_HEIGHT=640
+
+# Minimum macOS version required (14 = Sonoma, 15 = Sequoia)
+MIN_MACOS_VERSION="14"
+
+# Keep cookies and local storage between launches.
+#
+# false (default) uses an in-memory store: nothing touches disk, and every
+# launch starts clean. That is the private option, but if your bot sits behind
+# SSO it means users sign in every single launch.
+#
+# true persists the session so SSO sticks. "New Conversation" still wipes
+# everything either way.
+PERSISTENT_SESSION=false
+
+# --- Code signing (recommended for production) -------------------------------
+#
+# Leave both empty for an unsigned build. Unsigned apps install and run, but
+# macOS treats their permission grants as disposable, so users can get
+# re-prompted on every update.
+#
+# Find your identities with:
+#     security find-identity -v -p codesigning
+#
+# App bundle: "Developer ID Application: Your Org (TEAMID)"
+SIGNING_IDENTITY=""
+
+# Installer package: "Developer ID Installer: Your Org (TEAMID)"
+INSTALLER_IDENTITY=""

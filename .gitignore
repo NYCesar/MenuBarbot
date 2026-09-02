@@ -1,0 +1,11 @@
+# Your real configuration — contains your internal bot URL. Never commit.
+config.sh
+
+# Build output
+build/
+
+# Optional custom icon assets
+AppIcon.iconset/
+
+# macOS
+.DS_Store

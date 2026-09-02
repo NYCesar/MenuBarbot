@@ -13,9 +13,11 @@ Works with **Zapier Chatbots**, **Botpress**, **Tidio**, **Intercom**, **Drift**
 - Right-click menu with reload, new conversation, open in browser, quit
 - "New Conversation" clears all session data for a fresh start
 - External links open in your default browser
-- Dark mode support
+- Files the bot serves download to `~/Downloads` and get revealed in Finder
+- Follows light/dark mode, including live switches
 - Universal binary (Apple Silicon + Intel)
 - Auto-starts at login via LaunchAgent
+- Optional code signing for the app and installer package
 
 ## Quick Start (Local)
 
@@ -24,7 +26,7 @@ Works with **Zapier Chatbots**, **Botpress**, **Tidio**, **Intercom**, **Drift**
 ```bash
 git clone https://github.com/NYCesar/MenuBarBot.git
 cd MenuBarBot
-cp config.sh.example config.sh   # or just edit config.sh directly
+cp config.sh.example config.sh
 ```
 
 Open `config.sh` and set your chatbot URL:
@@ -36,6 +38,8 @@ APP_NAME="MenuBarBot"
 APP_IDENTIFIER="com.yourorg.menubarbot"
 APP_VERSION="1.0"
 ```
+
+`config.sh` is gitignored, so your internal bot URL stays out of the repo.
 
 ### 2. Build
 
@@ -62,17 +66,60 @@ sudo installer -pkg build/MenuBarBot-1.0.pkg -target /
 
 All configuration lives in `config.sh`. Edit once, and the build script, uninstall script, and all packaging pick it up automatically.
 
+### Required
+
 | Variable | What it does | Example |
 |---|---|---|
 | `BOT_URL` | The URL your chatbot is hosted at | `https://mybot.zapier.app/` |
-| `APP_DISPLAY_NAME` | Name shown in the menu bar tooltip and About dialog | `My IT Bot` |
+| `APP_DISPLAY_NAME` | Name shown in the popover title, tooltip and About dialog | `My IT Bot` |
 | `APP_NAME` | Internal name (no spaces) — used for the binary and .app bundle | `MyITBot` |
 | `APP_IDENTIFIER` | macOS bundle identifier | `com.yourcompany.itbot` |
 | `APP_VERSION` | Version string | `1.0` |
-| `APP_COPYRIGHT` | Copyright line in the About dialog | `© 2025 Acme Corp` |
-| `POPOVER_WIDTH` | Popover width in pixels (default: 420) | `420` |
-| `POPOVER_HEIGHT` | Popover height in pixels (default: 640) | `640` |
-| `MIN_MACOS_VERSION` | Minimum macOS version (default: 14 = Sonoma) | `14` |
+
+### Optional
+
+| Variable | What it does | Default |
+|---|---|---|
+| `APP_COPYRIGHT` | Copyright line in the About dialog | empty |
+| `POPOVER_WIDTH` | Popover width in pixels | `420` |
+| `POPOVER_HEIGHT` | Popover height in pixels | `640` |
+| `MIN_MACOS_VERSION` | Minimum macOS version (14 = Sonoma) | `14` |
+| `PERSISTENT_SESSION` | Keep cookies and local storage between launches | `false` |
+| `SIGNING_IDENTITY` | Developer ID Application identity for the .app | empty (unsigned) |
+| `INSTALLER_IDENTITY` | Developer ID Installer identity for the .pkg | empty (unsigned) |
+
+### A note on `PERSISTENT_SESSION`
+
+By default the web view uses an in-memory data store. Nothing touches disk and every launch starts clean, which is the right default for a shared or kiosk Mac.
+
+The tradeoff: if your bot sits behind SSO, users re-authenticate on every launch. Set `PERSISTENT_SESSION=true` to keep the session. "New Conversation" wipes everything either way.
+
+### A note on `BOT_URL` and HTTPS
+
+Use `https://`. App Transport Security stays fully enabled for HTTPS bots.
+
+If you set an `http://` URL, the build adds an ATS exception scoped to that one host and prints a warning. It does not turn on `NSAllowsArbitraryLoads`, so cleartext is never permitted for anything else the page loads.
+
+## Code Signing
+
+Unsigned builds install and run fine, which is why signing is optional. But macOS treats an unsigned app's permission grants as disposable, so users can get re-prompted after every update, and Apple keeps tightening what unsigned code is allowed to do.
+
+Find your identities:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+Then set them in `config.sh`:
+
+```bash
+SIGNING_IDENTITY="Developer ID Application: Acme Inc (AB12CD34EF)"
+INSTALLER_IDENTITY="Developer ID Installer: Acme Inc (AB12CD34EF)"
+```
+
+The build signs the app with the hardened runtime and a secure timestamp, then signs the resulting package with `productsign`. If either value is empty, that step is skipped and the build tells you so.
+
+Packages deployed through Jamf don't need notarization, since they aren't quarantined. If you plan to distribute the `.pkg` any other way (email, a download link, Self Service with a direct URL), run it through `notarytool` afterward.
 
 ## Custom App Icon
 
@@ -125,7 +172,9 @@ The `jamf/ea_version.sh` script reports the installed version back to Jamf. This
 1. Go to **Settings → Computer Management → Extension Attributes → New**
 2. Set **Data Type** to String, **Input Type** to Script
 3. Paste the contents of `jamf/ea_version.sh`
-4. **Important:** Update the `APP_PATH` variable in the script to match your `APP_NAME`
+4. **Important:** Update the `APP_IDENTIFIER` variable in the script to match your `config.sh`
+
+The script finds the app by bundle identifier rather than by path, so it keeps reporting correctly even if someone renames the `.app`.
 
 Example Smart Group criteria:
 - `MenuBarBot Version` is not `1.0` → machines needing an update
@@ -143,26 +192,36 @@ In your policy, go to the **Self Service** tab and enable "Make available in Sel
    - Parameter 4: Your `APP_NAME` (e.g., `MyITBot`)
    - Parameter 5: Your `APP_IDENTIFIER` (e.g., `com.yourcompany.itbot`)
 
+The uninstaller removes the app and LaunchAgent, forgets the installer receipt with `pkgutil --forget` (so receipt-based Smart Groups stop reporting the machine as installed), and clears the per-user WebKit caches the app leaves behind.
+
 ## Project Structure
 
 ```
 MenuBarBot/
-├── config.sh              # Your configuration (edit this)
-├── MenuBarBot.swift        # Main app source
+├── config.sh.example      # Template — copy to config.sh and edit
+├── config.sh              # Your configuration (gitignored)
+├── MenuBarBot.swift       # Main app source
+├── Config.swift           # Dev defaults; build.sh generates its own
 ├── build.sh               # Build + package script
 ├── uninstall.sh           # Uninstall script (local or Jamf)
 ├── jamf/
 │   └── ea_version.sh      # Jamf extension attribute script
-├── AppIcon.iconset/        # (optional) Your custom icon PNGs
+├── AppIcon.iconset/       # (optional) Your custom icon PNGs
 ├── LICENSE
 └── README.md
 ```
 
 ## How It Works
 
-The app is a single-file Swift program that uses AppKit's `NSStatusItem` for the menu bar icon and `NSPopover` with a `WKWebView` to display your chatbot. No Xcode project, no SwiftUI, no storyboards — just one Swift file compiled with `swiftc`.
+The app uses AppKit's `NSStatusItem` for the menu bar icon and `NSPopover` with a `WKWebView` to display your chatbot. No Xcode project, no SwiftUI, no storyboards — just Swift files compiled with `swiftc`.
 
-The build script reads your config, injects the values into the Swift source at compile time (via placeholder replacement), and produces a universal binary that runs on both Apple Silicon and Intel Macs.
+Configuration is compiled in, not read at runtime. `build.sh` reads `config.sh` and generates a `build/Config.swift` containing properly escaped Swift literals, then compiles that alongside `MenuBarBot.swift`. The sources in the repo are never modified, so they stay valid Swift you can open in an editor or compile directly:
+
+```bash
+swiftc -framework Cocoa -framework WebKit MenuBarBot.swift Config.swift -o MenuBarBot
+```
+
+That uses the development defaults in the repo's `Config.swift`, which `build.sh` ignores entirely.
 
 The LaunchAgent (`/Library/LaunchAgents/`) ensures the app starts automatically when any user logs in. It's installed to `/Library/LaunchAgents/` (not `~/Library/LaunchAgents/`) so it works for all users on the machine.
 
